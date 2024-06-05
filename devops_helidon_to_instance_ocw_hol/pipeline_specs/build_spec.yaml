@@ -1,0 +1,64 @@
+## Copyright (c) 2023, Oracle and/or its affiliates.
+## All rights reserved. The Universal Permissive License (UPL), Version 1.0 as shown at http://oss.oracle.com/licenses/upl
+
+# This build spec is custom tailored for the Helidon version 4 MP OCI template generated via the Helidon Archetype
+version: 0.1
+component: build
+timeoutInSeconds: 900
+failImmediatelyOnError: true
+runAs: root
+shell: bash
+env:
+  variables:
+    HELIDON_PROJECT_NAME: "oci-mp"
+    HELIDON_ARTIFACT_FILE_NAME: "helidon-oci-mp.tgz"
+    JDK21_TAR_GZ_INSTALLER: "https://download.java.net/openjdk/jdk21/ri/openjdk-21+35_linux-x64_bin.tar.gz"
+    # JDK21_TAR_GZ_INSTALLER: "https://download.oracle.com/java/21/latest/jdk-21_linux-x64_bin.tar.gz"
+  vaultVariables:
+  exportedVariables:
+    - BUILDRUN_HASH
+    - ARTIFACT_NAME
+    - HELIDON_APP_NAME
+    - JDK21_TAR_GZ_INSTALLER
+steps:
+  - type: Command
+    name: "Exported variables"
+    timeoutInSeconds: 140
+    command: |
+      echo "OCI_BUILD_RUN_ID: ${OCI_BUILD_RUN_ID}"
+      export BUILDRUN_HASH=`echo ${OCI_BUILD_RUN_ID} | rev | cut -c 1-7`
+      echo "BUILDRUN_HASH: " $BUILDRUN_HASH
+      export ARTIFACT_NAME=${HELIDON_ARTIFACT_FILE_NAME}
+      export HELIDON_APP_NAME="${HELIDON_PROJECT_NAME}-server.jar"
+      export JDK21_TAR_GZ_INSTALLER=${JDK21_TAR_GZ_INSTALLER}
+  - type: Command
+    name: "Install JDK21"
+    command: |
+      # wget https://download.oracle.com/java/20/latest/jdk-20_linux-x64_bin.rpm
+      # rpm -ivh jdk-20_linux-x64_bin.rpm
+      wget -q ${JDK21_TAR_GZ_INSTALLER} && echo "JDK21 downloaded successfully"
+      tar xzf $(basename ${JDK21_TAR_GZ_INSTALLER}) && echo "JDK21 installed successfully"
+  - type: Command
+    name: "Install Maven"
+    command: |
+      wget -q https://archive.apache.org/dist/maven/maven-3/3.9.1/binaries/apache-maven-3.9.1-bin.tar.gz && echo "Maven downloaded successfully"
+      tar xzf apache-maven-3.9.1-bin.tar.gz && echo "Maven installed successfully"
+  - type: Command
+    name: "Build the Application"
+    command: |
+      PATH=$(ls -d `pwd`/jdk*/)bin:$PATH
+      export JAVA_HOME=$(readlink -f `which java` | sed "s:/bin/java::")
+      export PATH=`pwd`/apache-maven-3.9.1/bin:$PATH
+      mvn clean package -DskipTests -B
+  - type: Command
+    name: "Assemble Application distribution"
+    command: |
+      tar -czf ${ARTIFACT_NAME} -C server/target/ libs ${HELIDON_APP_NAME}
+
+outputArtifacts:
+  - name: app_distribution
+    type: BINARY
+    location: ${ARTIFACT_NAME}
+  - name: deployment_spec
+    type: BINARY
+    location: deployment_spec.yaml
